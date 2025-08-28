@@ -1,43 +1,36 @@
 <?php
 include 'auth.php';
 
-class Profile {
-    public $username;
-    public $isAdmin = false;
-
-    function __toString() {
-        return "User: {$this->username}, Role: " . ($this->isAdmin ? "Admin" : "User");
-    }
-}
-
-if (!isset($_COOKIE['profile'])) {
-    die("Profile cookie tidak ditemukan. Silakan login ulang.");
-}
-
-$profile = unserialize($_COOKIE['profile']); 
-
-// jika admin, boleh hapus user lain
-if ($profile->isAdmin && isset($_POST['delete_user'])) {
-    $target = $_POST['delete_user'];
-    $GLOBALS['PDO']->exec("DELETE FROM users WHERE username='$target'");
-    $msg = "<p style='color:green'>User <b>$target</b> berhasil dihapus!</p>";
-}
+$username = $_SESSION['user'] ?? '';
+$isAdmin  = (($_SESSION['role'] ?? '') === 'admin');
 
 include '_header.php';
+
+if ($isAdmin && $_SERVER['REQUEST_METHOD'] === 'POST') {
+    if (!hash_equals($_SESSION['csrf'], $_POST['csrf'] ?? '')) {
+        die("Invalid CSRF token.");
+    }
+    $target = $_POST['delete_user'] ?? '';
+    $stmt = $GLOBALS['PDO']->prepare("DELETE FROM users WHERE username = ?");
+    $stmt->execute([$target]);
+    $msg = "<p style='color:green'>User <b>".htmlspecialchars($target, ENT_QUOTES, 'UTF-8')."</b> berhasil dihapus!</p>";
+}
 ?>
 <h2>Profile Page</h2>
-<p><?php echo $profile; ?></p>
+<p><?php echo "User: ".htmlspecialchars($username, ENT_QUOTES, 'UTF-8').", Role: ".($isAdmin ? "Admin" : "User"); ?></p>
 
-<?php if ($profile->isAdmin): ?>
+<?php if ($isAdmin): ?>
   <h3>Admin Panel</h3>
   <form method="post">
+    <input type="hidden" name="csrf" value="<?php echo htmlspecialchars($_SESSION['csrf'], ENT_QUOTES, 'UTF-8'); ?>">
     <label>Delete user:
-      <select name="delete_user">
+      <select name="delete_user" required>
         <?php
         $users = $GLOBALS['PDO']->query("SELECT username FROM users");
         foreach ($users as $u) {
-            if ($u['username'] !== $profile->username) {
-                echo "<option value='{$u['username']}'>{$u['username']}</option>";
+            if ($u['username'] !== $username) {
+                $opt = htmlspecialchars($u['username'], ENT_QUOTES, 'UTF-8');
+                echo "<option value='{$opt}'>{$opt}</option>";
             }
         }
         ?>
